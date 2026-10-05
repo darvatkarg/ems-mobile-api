@@ -18,7 +18,9 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
+            export NVM_DIR=~/.nvm
+            source ~/.nvm/nvm.sh
             cd ~/public_html
             git pull origin main
             npm install --omit=dev
-            npm start
+            touch server.js
