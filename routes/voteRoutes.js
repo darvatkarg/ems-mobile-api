@@ -36,7 +36,11 @@ async function voteRoutes(fastify, options) {
 
       const { operator_id, booth_id, votes } = fields;
 
-      if (!operator_id || !booth_id || !votes) {
+      // if (!operator_id || !booth_id || !votes) {
+      //   client.release();
+      //   return reply.code(400).send({ success: false, message: 'Missing required vote fields' });
+      // }
+      if (!operator_id || !booth_id) {
         client.release();
         return reply.code(400).send({ success: false, message: 'Missing required vote fields' });
       }
@@ -53,16 +57,16 @@ async function voteRoutes(fastify, options) {
       );
       const voteRecordId = recordResult.rows[0].id;
 
-      for (const [candidateId, count] of Object.entries(parsedVotes)) {
-        const voteCount = parseInt(count, 10) || 0;
-        if (voteCount >= 0) {
-          await client.query(
-            `INSERT INTO vote_details (vote_record_id, candidate_id, vote_count) 
-             VALUES ($1, $2, $3)`,
-            [voteRecordId, candidateId, voteCount]
-          );
-        }
-      }
+      // for (const [candidateId, count] of Object.entries(parsedVotes)) {
+      //   const voteCount = parseInt(count, 10) || 0;
+      //   if (voteCount >= 0) {
+      //     await client.query(
+      //       `INSERT INTO vote_details (vote_record_id, candidate_id, vote_count) 
+      //        VALUES ($1, $2, $3)`,
+      //       [voteRecordId, candidateId, voteCount]
+      //     );
+      //   }
+      // }
 
       await client.query('COMMIT');
       return reply.send({ success: true, message: 'Votes successfully recorded!' });
