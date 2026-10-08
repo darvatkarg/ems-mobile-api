@@ -2,7 +2,10 @@ const bcrypt = require('bcrypt');
 
 async function authRoutes(fastify, options) {
   fastify.post('/login', async (request, reply) => {
-    const { username, password } = request.body || {};
+    let { username, password } = request.body || {};
+
+    if (typeof username === 'string') username = username.trim();
+    if (typeof password === 'string') password = password.trim();
 
     if (!username || !password) {
       return reply.code(400).send({ success: false, message: 'Username and password required.' });
