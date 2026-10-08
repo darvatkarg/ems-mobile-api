@@ -18,7 +18,8 @@ async function voteRoutes(fastify, options) {
 
       for await (const part of parts) {
         if (part.type === 'file') {
-          const ext = path.extname(part.filename) || (part.fieldname === 'tally_video' ? '.mp4' : '.jpg');
+          const defaultExt = part.fieldname === 'tally_video' ? '.mp4' : '.jpg';
+          const ext = path.extname(part.filename || '') || defaultExt;
           const fileName = `${part.fieldname}_${Date.now()}${ext}`;
           const savePath = path.join(uploadsDir, fileName);
 
@@ -36,13 +37,15 @@ async function voteRoutes(fastify, options) {
 
       const { operator_id, booth_id, votes } = fields;
 
-      // if (!operator_id || !booth_id || !votes) {
-      //   client.release();
-      //   return reply.code(400).send({ success: false, message: 'Missing required vote fields' });
-      // }
       if (!operator_id || !booth_id) {
         client.release();
-        return reply.code(400).send({ success: false, message: 'Missing required vote fields' });
+        return reply.code(400).send({ success: false, message: 'Missing required operator or booth ID' });
+      }
+
+      // 2 photos are strictly mandatory; Video is optional
+      if (!tallySheetUrl || !tallySheetUrl2) {
+        client.release();
+        return reply.code(400).send({ success: false, message: 'Both Photo 1 and Photo 2 are required.' });
       }
 
       const parsedVotes = typeof votes === 'string' ? JSON.parse(votes) : votes;
