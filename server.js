@@ -28,6 +28,21 @@ fastify.register(require('@fastify/multipart'), {
   },
 });
 
+// Handle empty JSON bodies gracefully without throwing 400 Bad Request
+fastify.addContentTypeParser('application/json', { parseAs: 'string' }, function (req, body, done) {
+  try {
+    if (!body || body.trim() === '') {
+      done(null, {});
+      return;
+    }
+    const json = JSON.parse(body);
+    done(null, json);
+  } catch (err) {
+    err.statusCode = 400;
+    done(err, undefined);
+  }
+});
+
 // 5. PostgreSQL Pool
 fastify.register(require('@fastify/postgres'), {
   connectionString: process.env.DATABASE_URL,
