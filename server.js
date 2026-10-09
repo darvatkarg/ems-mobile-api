@@ -1,7 +1,17 @@
 require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
-const fastify = require('fastify')({ logger: true });
+// NOTE FOR MILESWEB HOSTING:
+// For Nginx or Apache / cPanel reverse proxies on MilesWeb, manually update your server config:
+// - Apache / cPanel (.htaccess): LimitRequestBody 536870912  and  TimeOut 600
+// - Nginx: client_max_body_size 512M;  proxy_read_timeout 600s;  proxy_connect_timeout 600s;  proxy_send_timeout 600s;
+
+const fastify = require('fastify')({
+  logger: true,
+  bodyLimit: 512 * 1024 * 1024, // 512MB payload limit (default is 1MB)
+  connectionTimeout: 600000,    // 10 minutes (600,000 ms)
+  keepAliveTimeout: 600000,     // 10 minutes (600,000 ms)
+});
 
 // 1. Ensure upload storage directories exist on persistent disk
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -21,10 +31,12 @@ fastify.register(require('@fastify/static'), {
   prefix: '/uploads/',
 });
 
-// 4. Multipart streaming (100MB limit for video proof)
+// 4. Multipart streaming (512MB limit for video proof and high-res tally sheets)
 fastify.register(require('@fastify/multipart'), {
   limits: {
-    fileSize: 100 * 1024 * 1024,
+    fileSize: 512 * 1024 * 1024,  // 512MB per file
+    fieldSize: 512 * 1024 * 1024, // 512MB per field
+    files: 3,                     // 2 photos + 1 video
   },
 });
 
