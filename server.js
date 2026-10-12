@@ -13,8 +13,9 @@ const fastify = require('fastify')({
   keepAliveTimeout: 600000,     // 10 minutes (600,000 ms)
 });
 
-// 1. Ensure upload storage directories exist on persistent disk
-const uploadsDir = path.join(__dirname, 'uploads');
+// 1. Ensure shared upload storage directories exist on persistent disk
+const { getUploadsDir } = require('./utils/uploadsConfig');
+const uploadsDir = getUploadsDir();
 const profileDir = path.join(uploadsDir, 'profile_pictures');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
@@ -25,10 +26,15 @@ fastify.register(require('@fastify/cors'), {
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
 });
 
-// 3. Static File Serving (photos, videos, avatars)
+// 3. Static File Serving (photos, videos, avatars) with caching headers
 fastify.register(require('@fastify/static'), {
   root: uploadsDir,
   prefix: '/uploads/',
+  maxAge: '30d',
+  immutable: true,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+  },
 });
 
 // 4. Multipart streaming (512MB limit for video proof and high-res tally sheets)

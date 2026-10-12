@@ -1,9 +1,10 @@
 const path = require('path');
 const fs = require('fs');
 const { compressProfileImage } = require('../utils/imageCompressor');
+const { getUploadsDir } = require('../utils/uploadsConfig');
 
 async function operatorRoutes(fastify, options) {
-  const profileDir = path.join(__dirname, '..', 'uploads', 'profile_pictures');
+  const profileDir = path.join(getUploadsDir(), 'profile_pictures');
 
   const getBaseUrl = () => {
     return (process.env.APP_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/+$/, '');
