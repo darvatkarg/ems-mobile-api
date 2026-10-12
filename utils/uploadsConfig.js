@@ -2,14 +2,9 @@ const path = require('path');
 const fs = require('fs');
 
 /**
- * Resolves the shared physical uploads directory.
- * Ensures both voting-mobile-api (which writes files) and voting-backend (which serves them)
- * point to the exact same physical directory on disk.
- *
- * Priority:
- * 1. process.env.UPLOADS_DIR (if explicitly specified and not default 'uploads')
- * 2. Shared sibling directory: ../voting-backend/uploads (if it exists)
- * 3. Local fallback: ../uploads
+ * Returns the primary uploads directory where new files are written.
+ * Defaults to voting-mobile-api's own uploads directory on persistent disk,
+ * ensuring write permissions and consistency on MilesWeb/cPanel.
  */
 function getUploadsDir() {
   let resolvedDir;
@@ -19,13 +14,8 @@ function getUploadsDir() {
       ? process.env.UPLOADS_DIR
       : path.resolve(__dirname, '..', process.env.UPLOADS_DIR);
   } else {
-    // Sibling backend uploads directory (shared local / VPS structure)
-    const backendUploads = path.resolve(__dirname, '..', '..', 'voting-backend', 'uploads');
-    if (fs.existsSync(backendUploads)) {
-      resolvedDir = backendUploads;
-    } else {
-      resolvedDir = path.resolve(__dirname, '..', 'uploads');
-    }
+    // Primary: Local service uploads folder (persistent on MilesWeb / cPanel)
+    resolvedDir = path.resolve(__dirname, '..', 'uploads');
   }
 
   if (!fs.existsSync(resolvedDir)) {
@@ -34,7 +24,41 @@ function getUploadsDir() {
     } catch (_) {}
   }
 
+  const profileDir = path.join(resolvedDir, 'profile_pictures');
+  if (!fs.existsSync(profileDir)) {
+    try {
+      fs.mkdirSync(profileDir, { recursive: true });
+    } catch (_) {}
+  }
+
   return resolvedDir;
 }
 
-module.exports = { getUploadsDir };
+/**
+ * Returns an array of directories to serve static uploads from.
+ * Guarantees that:
+ * 1. Local service uploads (where older profile pictures and media reside) are always found.
+ * 2. If a custom UPLOADS_DIR is set, it is mounted.
+ * 3. If a sibling voting-backend/uploads directory exists, it is checked as a fallback.
+ */
+function getUploadStaticRoots() {
+  const roots = [];
+  const primaryDir = getUploadsDir();
+  roots.push(primaryDir);
+
+  // Default local uploads directory (if primaryDir is custom)
+  const localDir = path.resolve(__dirname, '..', 'uploads');
+  if (!roots.includes(localDir) && fs.existsSync(localDir)) {
+    roots.push(localDir);
+  }
+
+  // Sibling voting-backend/uploads (if deployed side-by-side or monorepo)
+  const siblingBackend = path.resolve(__dirname, '..', '..', 'voting-backend', 'uploads');
+  if (!roots.includes(siblingBackend) && fs.existsSync(siblingBackend)) {
+    roots.push(siblingBackend);
+  }
+
+  return roots;
+}
+
+module.exports = { getUploadsDir, getUploadStaticRoots };

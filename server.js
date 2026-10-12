@@ -14,7 +14,7 @@ const fastify = require('fastify')({
 });
 
 // 1. Ensure shared upload storage directories exist on persistent disk
-const { getUploadsDir } = require('./utils/uploadsConfig');
+const { getUploadsDir, getUploadStaticRoots } = require('./utils/uploadsConfig');
 const uploadsDir = getUploadsDir();
 const profileDir = path.join(uploadsDir, 'profile_pictures');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -27,8 +27,9 @@ fastify.register(require('@fastify/cors'), {
 });
 
 // 3. Static File Serving (photos, videos, avatars) with caching headers
+const staticRoots = getUploadStaticRoots();
 fastify.register(require('@fastify/static'), {
-  root: uploadsDir,
+  root: staticRoots.length === 1 ? staticRoots[0] : staticRoots,
   prefix: '/uploads/',
   maxAge: '30d',
   immutable: true,
