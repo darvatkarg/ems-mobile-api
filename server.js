@@ -26,15 +26,27 @@ fastify.register(require('@fastify/cors'), {
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
 });
 
-// 3. Static File Serving (photos, videos, avatars) with caching headers
+// 3. Static File Serving (photos, videos, avatars) with caching and CORS headers
 const staticRoots = getUploadStaticRoots();
 fastify.register(require('@fastify/static'), {
   root: staticRoots.length === 1 ? staticRoots[0] : staticRoots,
   prefix: '/uploads/',
   maxAge: '30d',
   immutable: true,
-  setHeaders: (res) => {
-    res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+  setHeaders: (reply) => {
+    if (typeof reply.header === 'function') {
+      reply.header('Cache-Control', 'public, max-age=2592000, immutable');
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    } else if (reply.raw && typeof reply.raw.setHeader === 'function') {
+      reply.raw.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+      reply.raw.setHeader('Access-Control-Allow-Origin', '*');
+      reply.raw.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    } else if (typeof reply.setHeader === 'function') {
+      reply.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+      reply.setHeader('Access-Control-Allow-Origin', '*');
+      reply.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    }
   },
 });
 

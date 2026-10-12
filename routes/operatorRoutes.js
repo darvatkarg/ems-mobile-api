@@ -7,25 +7,53 @@ async function operatorRoutes(fastify, options) {
   const profileDir = path.join(getUploadsDir(), 'profile_pictures');
 
   const getBaseUrl = () => {
-    return (process.env.APP_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/+$/, '');
+    return (process.env.FILE_BASE_URL || process.env.APP_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/+$/, '');
   };
 
+  /**
+   * Safely deletes an avatar file from disk across all possible upload directories.
+   * Resolves the filename by stripping query parameters/hashes and catches any FS errors
+   * to guarantee the Node.js process never crashes.
+   */
   const deleteLocalAvatar = (fileUrl) => {
-    if (!fileUrl) return;
+    if (!fileUrl || typeof fileUrl !== 'string') return;
     try {
-      const fileName = path.basename(fileUrl);
-      const filePath = path.join(profileDir, fileName);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      const cleanUrl = fileUrl.split('?')[0].split('#')[0];
+      const fileName = path.basename(cleanUrl);
+      if (!fileName || fileName === '.' || fileName === '/') return;
+
+      const candidateDirs = [
+        profileDir,
+        getUploadsDir(),
+        path.resolve(__dirname, '..', 'uploads', 'profile_pictures'),
+        path.resolve(__dirname, '..', 'uploads'),
+        path.resolve(__dirname, '..', '..', 'voting-backend', 'uploads', 'profile_pictures'),
+        path.resolve(__dirname, '..', '..', 'voting-backend', 'uploads'),
+      ];
+
+      for (const dir of candidateDirs) {
+        try {
+          const filePath = path.join(dir, fileName);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            break;
+          }
+        } catch (unlinkErr) {
+          // Ignore individual unlink errors to keep process crash-proof
+        }
       }
     } catch (err) {
-      fastify.log.warn(`Could not delete previous avatar: ${err.message}`);
+      console.warn(`[operatorRoutes] Could not delete avatar: ${err.message}`);
     }
   };
 
   // PUT /api/operators/profile
   fastify.put('/profile', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const operatorId = request.user.id;
+    const operatorId = request.user?.id;
+    if (!operatorId) {
+      return reply.code(401).send({ success: false, message: 'Unauthorized operator' });
+    }
+
     const parts = request.parts();
     const fields = {};
     let newProfileUrl = null;
@@ -38,13 +66,22 @@ async function operatorRoutes(fastify, options) {
           const { buffer: compressedBuffer, ext } = await compressProfileImage(buffer);
 
           // Delete previous avatar file from disk
-          const existingRes = await fastify.pg.query(
-            'SELECT profile_picture FROM operators WHERE id = $1',
-            [operatorId]
-          );
-          const oldPicUrl = existingRes.rows[0]?.profile_picture;
-          if (oldPicUrl) {
-            deleteLocalAvatar(oldPicUrl);
+          try {
+            const existingRes = await fastify.pg.query(
+              'SELECT profile_picture FROM operators WHERE id = $1',
+              [operatorId]
+            );
+            const oldPicUrl = existingRes.rows[0]?.profile_picture;
+            if (oldPicUrl) {
+              deleteLocalAvatar(oldPicUrl);
+            }
+          } catch (fetchErr) {
+            console.warn(`[operatorRoutes] Could not check existing avatar: ${fetchErr.message}`);
+          }
+
+          // Ensure profile_pictures directory exists before writing
+          if (!fs.existsSync(profileDir)) {
+            fs.mkdirSync(profileDir, { recursive: true });
           }
 
           // Write compressed WebP directly to disk
@@ -89,9 +126,13 @@ async function operatorRoutes(fastify, options) {
 
   // DELETE /api/operators/profile/picture
   fastify.delete('/profile/picture', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const operatorId = request.user.id;
-
     try {
+      const operatorId = request.user?.id;
+      if (!operatorId) {
+        return reply.code(401).send({ success: false, message: 'Unauthorized operator' });
+      }
+
+      // 1. Fetch current profile picture URL from database
       const existingRes = await fastify.pg.query(
         'SELECT profile_picture FROM operators WHERE id = $1',
         [operatorId]
@@ -106,6 +147,7 @@ async function operatorRoutes(fastify, options) {
         deleteLocalAvatar(oldPicUrl);
       }
 
+      // 2. Set profile_picture to NULL in database
       const result = await fastify.pg.query(
         `UPDATE operators SET profile_picture = NULL WHERE id = $1 
          RETURNING id, username, full_name, assigned_booth_id, profile_picture`,
@@ -113,7 +155,7 @@ async function operatorRoutes(fastify, options) {
       );
 
       const updatedOp = result.rows[0];
-      return reply.send({
+      return reply.code(200).send({
         success: true,
         message: 'Profile picture removed successfully',
         operator: updatedOp,
@@ -121,7 +163,7 @@ async function operatorRoutes(fastify, options) {
         profile_picture_url: null,
       });
     } catch (err) {
-      fastify.log.error(err);
+      console.error('[operatorRoutes] Error removing profile picture:', err);
       return reply.code(500).send({ success: false, message: `Error removing profile picture: ${err.message}` });
     }
   });
